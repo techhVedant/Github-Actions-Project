@@ -8,9 +8,7 @@ on:
 
 jobs:
   compile:
-
     runs-on: self-hosted
-
     steps:
     - uses: actions/checkout@v4
     - name: Set up JDK 17
@@ -25,31 +23,26 @@ jobs:
   security-check:
     needs: compile
     runs-on: self-hosted
-
     steps:
     - uses: actions/checkout@v4
     - name: Trivy Installation
       run: |
-              sudo apt-get update -y
-              sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-              wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
-              echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-              sudo apt-get update -y
-              sudo apt-get install -y trivy
-
+        sudo apt-get update -y
+        sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+        echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update -y
+        sudo apt-get install -y trivy
     - name: Trivy Repo Scan
       run: trivy fs --format json --output fs-report.json .
-
     - name: GitLeaks Installation
       run: sudo apt install gitleaks -y
-    
     - name: GitLeaks Scan
       run: gitleaks detect source . -r gitleaks-report.json -f json
 
   unit_tests:
     needs: security-check
     runs-on: self-hosted
-
     steps:
     - uses: actions/checkout@v4
     - name: Set up JDK 17
@@ -64,7 +57,6 @@ jobs:
   project_build_and_sonar_scan:
     needs: unit_tests
     runs-on: self-hosted
-
     steps:
     - uses: actions/checkout@v4
     - name: Set up JDK 17
@@ -75,23 +67,19 @@ jobs:
         cache: maven
     - name: Project Build
       run: mvn package
-
     - name: Upload JAR artifact
       uses: actions/upload-artifact@v4
       with:
         name: my-app-jar
         path: target/*.jar
-
     - uses: actions/checkout@v4
       with:
-        # Disabling shallow clones is recommended for improving the relevancy of reporting
         fetch-depth: 0
     - name: SonarQube Scan
-      uses: SonarSource/sonarqube-scan-action@v5.3.0 # Ex: v4.1.0, See the latest version at https://github.com/marketplace/actions/official-sonarqube-scan
+      uses: SonarSource/sonarqube-scan-action@v5.3.0
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-
     - name: SonarQube Quality Gate check
       id: sonarqube-quality-gate-check
       uses: sonarsource/sonarqube-quality-gate-action@master
@@ -99,36 +87,42 @@ jobs:
         pollingTimeoutSec: 600
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }} 
+        SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
   build_docker_image_and_push:
-      needs: project_build_and_sonar_scan
-      runs-on: self-hosted
+    needs: project_build_and_sonar_scan
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v4
 
-      steps:
-      - uses: actions/checkout@v4
-      - name: Download JAR artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: my-app-jar
-          path: app #This will download the jar file to ./app folder
+    - name: Download JAR artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: my-app-jar
+        path: app
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        
-        with:
-          push: true
-          tags: techhforvedant21/bankapp:latest
+    - name: Move JAR to root (flatten path)
+      run: mv app/*.jar .
 
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ vars.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: List files (for debugging)
+      run: ls -R .
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: techhforvedant21/bankapp:latest
