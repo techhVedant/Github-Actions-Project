@@ -110,7 +110,7 @@ jobs:
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
-          name: app-jar
+          name: my-app-jar
           path: app #This will download the jar file to ./app folder
 
       - name: Login to Docker Hub
