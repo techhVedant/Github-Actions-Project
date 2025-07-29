@@ -47,7 +47,7 @@ jobs:
       run: gitleaks detect source . -r gitleaks-report.json -f json
 
   unit_tests:
-
+    needs: security-check
     runs-on: self-hosted
 
     steps:
